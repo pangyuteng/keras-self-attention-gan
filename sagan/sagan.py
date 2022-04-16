@@ -19,6 +19,13 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import tensorflow_addons as tfa
 
+"""
+references
+https://arxiv.org/pdf/1805.08318.pdf
+https://github.com/brain-research/self-attention-gan
+https://github.com/taki0112/Self-Attention-GAN-Tensorflow
+https://lilianweng.github.io/posts/2018-06-24-attention
+"""
 class SelfAttention2D(keras.layers.Layer):
     def __init__(self,channel,trainable=True,**kwargs):
         super(SelfAttention2D, self).__init__(**kwargs)
@@ -70,7 +77,7 @@ class SAGAN():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         self.latent_dim = 100
 
-        optimizer = Adam(0.0002, 0.5)
+        optimizer = Adam(0.0001, 0.5)
 
         # Build and compile the discriminator
         self.discriminator = self.build_discriminator()
@@ -237,4 +244,4 @@ class SAGAN():
 
 if __name__ == '__main__':
     gan = SAGAN()
-    gan.train(epochs=30000, batch_size=32, sample_interval=200)
+    gan.train(epochs=30000, batch_size=256, sample_interval=200)
