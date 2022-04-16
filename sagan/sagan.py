@@ -55,24 +55,27 @@ class GAN():
 
         model = Sequential()
 
-        model.add(Dense(256, input_dim=self.latent_dim))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
-        
-        model.add(Dense(256))
+        model.add(Dense(49, input_dim=self.latent_dim))
         model.add(LeakyReLU(alpha=0.2))
         model.add(BatchNormalization(momentum=0.8))
 
-        model.add(Dense(196))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
-
-        myshape = (14,14,1)
+        myshape = (7,7,1)
         model.add(Reshape(myshape))
-        
-        #model.add(Conv2DTranspose(32,3,strides=(2,2),padding="same"))
+
+        #model.add(Dense(256))
         #model.add(LeakyReLU(alpha=0.2))
         #model.add(BatchNormalization(momentum=0.8))
+
+        #model.add(Dense(196))
+        #model.add(LeakyReLU(alpha=0.2))
+        #model.add(BatchNormalization(momentum=0.8))
+
+        #myshape = (14,14,1)
+        #model.add(Reshape(myshape))
+        
+        model.add(Conv2DTranspose(32,3,strides=(2,2),padding="same"))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(BatchNormalization(momentum=0.8))
 
         model.add(Conv2DTranspose(16,3,strides=(2,2),padding="same"))
         model.add(LeakyReLU(alpha=0.2))
@@ -91,12 +94,10 @@ class GAN():
         model = Sequential()
         model.add(Conv2D(16,(3,3),padding="same",input_shape=self.img_shape))
         model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
         model.add(MaxPooling2D(pool_size=(2, 2)))
 
         model.add(Conv2D(32,(3,3),padding="same"))
         model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
         model.add(MaxPooling2D(pool_size=(2, 2)))
 
         model.add(Flatten())
@@ -123,8 +124,8 @@ class GAN():
         X_train = np.expand_dims(X_train, axis=3)
 
         # Adversarial ground truths
-        valid = np.ones((batch_size, 1)) #+ 0.05*np.random.normal(0, 1, (batch_size,1))
-        fake = np.zeros((batch_size, 1)) #+ 0.05*np.random.normal(0, 1, (batch_size,1))
+        valid = np.ones((batch_size, 1)) #+ 0.01*np.random.normal(0, 1, (batch_size,1))
+        fake = np.zeros((batch_size, 1)) #+ 0.01*np.random.normal(0, 1, (batch_size,1))
 
         for epoch in range(epochs):
 
