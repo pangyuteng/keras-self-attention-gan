@@ -11,12 +11,58 @@ from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.optimizers import Adam
 
 import matplotlib.pyplot as plt
-
 import sys
-
 import numpy as np
 
-class GAN():
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+import tensorflow_addons as tfa
+
+class SelfAttention2D(keras.layers.Layer):
+    def __init__(self,channel,trainable=True,**kwargs):
+        super(SelfAttention2D, self).__init__(**kwargs)
+        self.channel = channel # channel from prior layer
+        self.trainable = trainable
+
+    def build(self, input_shape):
+        
+        sn = tfa.layers.SpectralNormalization
+        mykwargs = dict(kernel_size=1, strides=1, use_bias=False, padding="same",trainable=self.trainable)
+        
+        self.conv_f = sn(layers.Conv2D(self.channel // 8, **mykwargs))# [bs, h, w, c']
+        self.conv_g = sn(layers.Conv2D(self.channel // 8, **mykwargs)) # [bs, h, w, c']
+        self.conv_h = sn(layers.Conv2D(self.channel, **mykwargs)) # [bs, h, w, c]
+        self.conv_v = sn(layers.Conv2D(self.channel, **mykwargs))# [bs, h, w, c]
+
+        self.gamma = self.add_weight(name='gamma',shape=(1,),initializer='zeros',trainable=self.trainable)
+
+    @staticmethod
+    def hw_flatten(x) :
+        shape = x.get_shape().as_list()
+        dim = np.prod(shape[1:-1])
+        return tf.reshape(x, [-1, dim, shape[-1]])
+        
+    def call(self, inputs):
+        f = self.conv_f(inputs) # key
+        g = self.conv_g(inputs) # query
+        h = self.conv_h(inputs) # value
+
+        s = tf.matmul(self.hw_flatten(g), self.hw_flatten(f), transpose_b=True) # [bs, N, N], N = h * w
+        beta = tf.nn.softmax(s) # beta is your attention map
+        
+        o = tf.matmul(beta, self.hw_flatten(h)) # [bs, N, C]
+        input_shape = (-1,)+tuple(inputs.get_shape().as_list()[1:])
+        o = tf.reshape(o, shape=input_shape) # [bs, h, w, C]
+        o = self.conv_v(o)
+
+        y = self.gamma * o + inputs
+
+        return y
+
+
+
+class SAGAN():
     def __init__(self):
         self.img_rows = 28
         self.img_cols = 28
@@ -54,6 +100,8 @@ class GAN():
     def build_generator(self):
 
         model = Sequential()
+        
+        self.generator_attn = SelfAttention2D(32)
 
         model.add(Dense(196, input_dim=self.latent_dim))
         model.add(LeakyReLU(alpha=0.2))
@@ -70,7 +118,7 @@ class GAN():
         model.add(LeakyReLU(alpha=0.2))
         model.add(BatchNormalization(momentum=0.8))
 
-        #model.add(SelfAttention2D())
+        model.add(self.generator_attn)
 
         model.add(Conv2DTranspose(16,3,strides=(2,2),padding="same"))
         model.add(LeakyReLU(alpha=0.2))
@@ -85,13 +133,15 @@ class GAN():
         return Model(noise, img)
 
     def build_discriminator(self):
+        
+        self.discriminator_attn = SelfAttention2D(16)
 
         model = Sequential()
         model.add(Conv2D(16,(3,3),padding="same",input_shape=self.img_shape))
         model.add(LeakyReLU(alpha=0.2))
         model.add(MaxPooling2D(pool_size=(2, 2)))
 
-        #model.add(SelfAttention2D())
+        model.add(self.discriminator_attn)
 
         model.add(Conv2D(32,(3,3),padding="same"))
         model.add(LeakyReLU(alpha=0.2))
@@ -155,9 +205,12 @@ class GAN():
 
             # Train the generator (to have the discriminator label samples as valid)
             g_loss = self.combined.train_on_batch(noise, valid)
+            
+            g_gamma = self.generator_attn.gamma.numpy()
+            d_gamma = self.discriminator_attn.gamma.numpy()
 
             # Plot the progress
-            print ("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (epoch, d_loss[0], 100*d_loss[1], g_loss))
+            print ("%d [D loss: %f, acc.: %.2f%% gamma: %1.5f] [G loss: %f, gamma: %1.5f] " % (epoch, d_loss[0], 100*d_loss[1], d_gamma, g_loss, g_gamma))
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
@@ -183,5 +236,5 @@ class GAN():
 
 
 if __name__ == '__main__':
-    gan = GAN()
+    gan = SAGAN()
     gan.train(epochs=30000, batch_size=32, sample_interval=200)
