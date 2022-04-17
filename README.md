@@ -3,10 +3,15 @@
 
 ```
 docker build -t attention .
-docker run -it --runtime=nvidia -u $(id -u):$(id -g) -v /mnt:/mnt -w /workdir -v $PWD:/workdir attention bash
+docker run -it --runtime=nvidia --gpus=1 -u $(id -u):$(id -g) -w /workdir -v $PWD:/workdir attention bash
 
+# original gan
+cd gan
+python gan.py
 
-CUDA_VISIBLE_DEVICES=3 python $file
+# self attention gan
+cd sagan
+python sagan.py
 
 
 ```
