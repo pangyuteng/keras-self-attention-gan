@@ -79,7 +79,9 @@ class SelfAttention2D(keras.layers.Layer):
 
 SCALE = 28./16.
 BETA_SHAPE = (16,16)
-N_SAMPLE = 5
+N_SAMPLE0, N_SAMPLE1, N_SAMPLE2 = 1,2,5
+# N_SAMPLE0 could 1 or 2, given dim of `beta`
+# N_SAMPLE1, N_SAMPLE2 contrained by size of `beta`
 COLOR_LIST ='rgbcmrgbcm'
 
 class SAGAN():
@@ -250,16 +252,16 @@ class SAGAN():
                 cnt += 1
         fig.savefig("images/%d.png" % epoch)
         plt.close()
-
+        plt.figure(figsize=(20,20))
         fig, axs = plt.subplots(r, c)
         cnt = 0        
         for i in range(r):
             for j in range(c):
                 attn_dict = {}
-                for k in range(2):
+                for k in range(N_SAMPLE0):
                     beta = gen_beta[cnt,:,:]
-                    argsort_list = np.argsort(np.sum(beta,axis=k))[::-1]                    
-                    for l in argsort_list[:N_SAMPLE]:
+                    argsort_list = np.argsort(np.sum(beta,axis=k))[::-1]
+                    for l in argsort_list[:N_SAMPLE1]:
                         
                         l_coord = np.unravel_index(l, BETA_SHAPE,)
                         attn_dict[l_coord]=[]
@@ -269,20 +271,20 @@ class SAGAN():
                         else: # get x of large values
                             m = np.argsort(beta[:,l].squeeze())[::-1]
                             
-                        for n in range(N_SAMPLE):                                
+                        for n in range(N_SAMPLE2):
                             m_coord = np.unravel_index(m[n], BETA_SHAPE,)
                             attn_dict[l_coord].append(m_coord)
                 
                 axs[i,j].imshow(gen_imgs[cnt, :,:,0], cmap='gray')
-                for n, source in enumerate(attn_dict.keys()):                    
+                for n, source in enumerate(attn_dict.keys()):
                     x0,y0 = source
                     x0,y0 = float(x0)*SCALE,float(y0)*SCALE # rescale to original image size
-                    axs[i,j].scatter(y0,x0,s=0.8,color=COLOR_LIST[n],alpha=1)
+                    axs[i,j].scatter(y0,x0,s=30,marker='X',linewidths=0.5,color=COLOR_LIST[n],alpha=1)
                     target_list = attn_dict[source]
                     for target in target_list:
                         x1,y1 = target
                         x1,y1 = float(x1)*SCALE,float(y1)*SCALE
-                        axs[i,j].scatter(y1,x1,s=0.5,color=COLOR_LIST[n],alpha=0.5)
+                        axs[i,j].scatter(y1,x1,s=10,marker='o',linewidths=0.5,color=COLOR_LIST[n],alpha=0.5)
                 axs[i,j].axis('off')
                 cnt += 1
         fig.savefig("beta/%d.png" % epoch)
