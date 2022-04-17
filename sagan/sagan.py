@@ -277,7 +277,7 @@ class SAGAN():
                 for n, source in enumerate(attn_dict.keys()):                    
                     x0,y0 = source
                     x0,y0 = float(x0)*SCALE,float(y0)*SCALE # rescale to original image size
-                    axs[i,j].scatter(y0,x0,s=0.5,color=COLOR_LIST[n],alpha=1)
+                    axs[i,j].scatter(y0,x0,s=0.8,color=COLOR_LIST[n],alpha=1)
                     target_list = attn_dict[source]
                     for target in target_list:
                         x1,y1 = target
