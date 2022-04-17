@@ -35,6 +35,7 @@ https://arxiv.org/pdf/1805.08318.pdf
 https://github.com/brain-research/self-attention-gan
 https://github.com/taki0112/Self-Attention-GAN-Tensorflow
 https://lilianweng.github.io/posts/2018-06-24-attention
+https://stackoverflow.com/questions/50819931/self-attention-gan-in-keras
 """
 class SelfAttention2D(keras.layers.Layer):
     def __init__(self,channel,trainable=True,**kwargs):
