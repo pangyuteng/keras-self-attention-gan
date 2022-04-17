@@ -11,13 +11,23 @@ from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.optimizers import Adam
 
 import matplotlib.pyplot as plt
+import os
 import sys
+import random
 import numpy as np
 
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 import tensorflow_addons as tfa
+
+
+def set_seed(seed_value=0):
+    os.environ['PYTHONHASHSEED']=str(seed_value)
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    tf.random.set_seed(seed_value)
+set_seed()
 
 """
 references
@@ -67,7 +77,10 @@ class SelfAttention2D(keras.layers.Layer):
 
         return y, beta
 
-
+SCALE = 28./16.
+BETA_SHAPE = (16,16)
+N_SAMPLE = 5
+COLOR_LIST ='rgbcmrgbcm'
 
 class SAGAN():
     def __init__(self):
@@ -77,7 +90,7 @@ class SAGAN():
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         self.latent_dim = 100
 
-        optimizer = Adam(0.0002, 0.5)
+        optimizer = Adam(0.0001, 0.5)
 
         # Build and compile the discriminator
         self.discriminator = self.build_discriminator()
@@ -238,16 +251,38 @@ class SAGAN():
         fig.savefig("images/%d.png" % epoch)
         plt.close()
 
-        print(gen_beta.shape,gen_imgs.shape)
-        #(25, 196, 196) (25, 28, 28, 1)
-        # get triangle, remove identiy find top few
-        # plot lines to indicate location
-        gen_beta = np.expand_dims(gen_beta,axis=-1)
         fig, axs = plt.subplots(r, c)
-        cnt = 0
+        cnt = 0        
         for i in range(r):
             for j in range(c):
-                axs[i,j].imshow(gen_beta[cnt, :,:,0], cmap='gray')
+                attn_dict = {}
+                for k in range(2):
+                    beta = gen_beta[cnt,:,:]
+                    argsort_list = np.argsort(np.sum(beta,axis=k))[::-1]                    
+                    for l in argsort_list[:N_SAMPLE]:
+                        
+                        l_coord = np.unravel_index(l, BETA_SHAPE,)
+                        attn_dict[l_coord]=[]
+
+                        if k == 0: # get y of large values
+                            m = np.argsort(beta[l,:].squeeze())[::-1]
+                        else: # get x of large values
+                            m = np.argsort(beta[:,l].squeeze())[::-1]
+                            
+                        for n in range(N_SAMPLE):                                
+                            m_coord = np.unravel_index(m[n], BETA_SHAPE,)
+                            attn_dict[l_coord].append(m_coord)
+                
+                axs[i,j].imshow(gen_imgs[cnt, :,:,0], cmap='gray')
+                for n, source in enumerate(attn_dict.keys()):                    
+                    x0,y0 = source
+                    x0,y0 = float(x0)*SCALE,float(y0)*SCALE # rescale to original image size
+                    axs[i,j].scatter(y0,x0,s=0.5,color=COLOR_LIST[n],alpha=1)
+                    target_list = attn_dict[source]
+                    for target in target_list:
+                        x1,y1 = target
+                        x1,y1 = float(x1)*SCALE,float(y1)*SCALE
+                        axs[i,j].scatter(y1,x1,s=0.5,color=COLOR_LIST[n],alpha=0.5)
                 axs[i,j].axis('off')
                 cnt += 1
         fig.savefig("beta/%d.png" % epoch)
