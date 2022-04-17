@@ -65,7 +65,7 @@ class SelfAttention2D(keras.layers.Layer):
 
         y = self.gamma * o + inputs
 
-        return y
+        return y, beta
 
 
 
@@ -90,14 +90,14 @@ class SAGAN():
 
         # The generator takes noise as input and generates imgs
         z = Input(shape=(self.latent_dim,))
-        img = self.generator(z)
+        img, gen_beta = self.generator(z)
 
         # For the combined model we will only train the generator
         self.discriminator.trainable = False
 
         # The discriminator takes generated images as input and determines validity
         validity = self.discriminator(img)
-
+        
         # The combined model  (stacked generator and discriminator)
         # Trains the generator to fool the discriminator
         self.combined = Model(z, validity)
@@ -105,68 +105,64 @@ class SAGAN():
 
 
     def build_generator(self):
-
-        model = Sequential()
         
-        self.generator_attn = SelfAttention2D(32)
+        inputs = Input(shape=(self.latent_dim,))
 
-        model.add(Dense(196, input_dim=self.latent_dim))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
+        x = Dense(196)(inputs)
+        x = LeakyReLU(alpha=0.2)(x)
+        x = BatchNormalization(momentum=0.8)(x)
  
-        model.add(Dense(196))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
+        x = Dense(196)(x)
+        x = LeakyReLU(alpha=0.2)(x)
+        x = BatchNormalization(momentum=0.8)(x)
 
         myshape = (14,14,1)
-        model.add(Reshape(myshape))
+        x = Reshape(myshape)(x)
         
-        model.add(Conv2D(32,3,padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
+        x = Conv2D(32,3,padding="same")(x)
+        x = LeakyReLU(alpha=0.2)(x)
+        x = BatchNormalization(momentum=0.8)(x)
 
-        model.add(self.generator_attn)
+        self.generator_attn = SelfAttention2D(32)
+        x, beta = self.generator_attn(x)
+        x = Conv2DTranspose(16,3,strides=(2,2),padding="same")(x)
+        x = LeakyReLU(alpha=0.2)(x)
+        x = BatchNormalization(momentum=0.8)(x)
+        outputs = Conv2D(1,(3,3),padding="same",activation='tanh')(x)
 
-        model.add(Conv2DTranspose(16,3,strides=(2,2),padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(BatchNormalization(momentum=0.8))
-        
-        model.add(Conv2D(1,(3,3),padding="same",activation='tanh'))
+        model = Model(inputs=inputs, outputs=[outputs,beta])
         model.summary()
 
-        noise = Input(shape=(self.latent_dim,))
-        img = model(noise)
-
-        return Model(noise, img)
+        return model
 
     def build_discriminator(self):
         
+        inputs = Input(shape=self.img_shape)
+
+        x = Conv2D(16,(3,3),padding="same")(inputs)
+        x = LeakyReLU(alpha=0.2)(x)
+        x = MaxPooling2D(pool_size=(2, 2))(x)
+
         self.discriminator_attn = SelfAttention2D(16)
+        x, beta = self.discriminator_attn(x)
 
-        model = Sequential()
-        model.add(Conv2D(16,(3,3),padding="same",input_shape=self.img_shape))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(MaxPooling2D(pool_size=(2, 2)))
+        x = Conv2D(32,(3,3),padding="same")(x)
+        x = LeakyReLU(alpha=0.2)(x)
+        x = MaxPooling2D(pool_size=(2, 2))(x)
 
-        model.add(self.discriminator_attn)
+        x = Flatten()(x)
+        x = Dense(512)(x)
+        x = LeakyReLU(alpha=0.2)(x)
 
-        model.add(Conv2D(32,(3,3),padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(MaxPooling2D(pool_size=(2, 2)))
+        x = Dense(256)(x)
+        x = LeakyReLU(alpha=0.2)(x)
+        
+        outputs = Dense(1, activation='sigmoid')(x)
 
-        model.add(Flatten())
-        model.add(Dense(512))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dense(256))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dense(1, activation='sigmoid'))
-
+        model = Model(inputs=inputs, outputs=outputs)
         model.summary()
 
-        img = Input(shape=self.img_shape)
-        validity = model(img)
-
-        return Model(img, validity)
+        return model
 
     def train(self, epochs, batch_size=128, sample_interval=50):
 
@@ -197,7 +193,7 @@ class SAGAN():
             noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
 
             # Generate a batch of new images
-            gen_imgs = self.generator.predict(noise)
+            gen_imgs, gen_beta = self.generator.predict(noise)
 
             # Train the discriminator
             d_loss_real = self.discriminator.train_on_batch(imgs, valid)
@@ -215,19 +211,20 @@ class SAGAN():
             
             g_gamma = self.generator_attn.gamma.numpy()
             d_gamma = self.discriminator_attn.gamma.numpy()
-
+            
             # Plot the progress
-            print ("%d [D loss: %f, acc.: %.2f%% gamma: %1.5f] [G loss: %f, gamma: %1.5f] " % (epoch, d_loss[0], 100*d_loss[1], d_gamma, g_loss, g_gamma))
+            print ("%d [D loss: %f, acc.: %.2f%% gamma: %1.5f] [G loss: %f, gamma: %1.5f] " % (epoch, d_loss[0], 100*d_loss[1], d_gamma, g_loss, g_gamma))            
 
             # If at save interval => save generated image samples
             if epoch % sample_interval == 0:
                 self.sample_images(epoch)
+                
 
     def sample_images(self, epoch):
         r, c = 5, 5
         noise = np.random.normal(0, 1, (r * c, self.latent_dim))
-        gen_imgs = self.generator.predict(noise)
-
+        gen_imgs, gen_beta = self.generator.predict(noise)
+        
         # Rescale images 0 - 1
         gen_imgs = 0.5 * gen_imgs + 0.5
 
@@ -241,6 +238,20 @@ class SAGAN():
         fig.savefig("images/%d.png" % epoch)
         plt.close()
 
+        print(gen_beta.shape,gen_imgs.shape)
+        #(25, 196, 196) (25, 28, 28, 1)
+        # get triangle, remove identiy find top few
+        # plot lines to indicate location
+        gen_beta = np.expand_dims(gen_beta,axis=-1)
+        fig, axs = plt.subplots(r, c)
+        cnt = 0
+        for i in range(r):
+            for j in range(c):
+                axs[i,j].imshow(gen_beta[cnt, :,:,0], cmap='gray')
+                axs[i,j].axis('off')
+                cnt += 1
+        fig.savefig("beta/%d.png" % epoch)
+        plt.close()
 
 if __name__ == '__main__':
     gan = SAGAN()
