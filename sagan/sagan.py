@@ -37,21 +37,27 @@ https://github.com/taki0112/Self-Attention-GAN-Tensorflow
 https://lilianweng.github.io/posts/2018-06-24-attention
 https://stackoverflow.com/questions/50819931/self-attention-gan-in-keras
 """
-class SelfAttention2D(keras.layers.Layer):
-    def __init__(self,channel,trainable=True,**kwargs):
-        super(SelfAttention2D, self).__init__(**kwargs)
+class SelfAttention(keras.layers.Layer):
+    def __init__(self,channel,trainable=True,
+        convclass=layers.Conv2D,**kwargs):
+        super(SelfAttention, self).__init__(**kwargs)
+        self.ConvClass = convclass
         self.channel = channel # channel from prior layer
         self.trainable = trainable
+
+    def get_config(self):
+        cfg = super().get_config()
+        return cfg
 
     def build(self, input_shape):
         
         sn = tfa.layers.SpectralNormalization
         mykwargs = dict(kernel_size=1, strides=1, use_bias=False, padding="same",trainable=self.trainable)
         
-        self.conv_f = sn(layers.Conv2D(self.channel // 8, **mykwargs))# [bs, h, w, c']
-        self.conv_g = sn(layers.Conv2D(self.channel // 8, **mykwargs)) # [bs, h, w, c']
-        self.conv_h = sn(layers.Conv2D(self.channel, **mykwargs)) # [bs, h, w, c]
-        self.conv_v = sn(layers.Conv2D(self.channel, **mykwargs))# [bs, h, w, c]
+        self.conv_f = sn(self.ConvClass(self.channel // 8, **mykwargs))# [bs, h, w, c']
+        self.conv_g = sn(self.ConvClass(self.channel // 8, **mykwargs)) # [bs, h, w, c']
+        self.conv_h = sn(self.ConvClass(self.channel, **mykwargs)) # [bs, h, w, c]
+        self.conv_v = sn(self.ConvClass(self.channel, **mykwargs))# [bs, h, w, c]
 
         self.gamma = self.add_weight(name='gamma',shape=(1,),initializer='zeros',trainable=self.trainable)
 
@@ -60,7 +66,7 @@ class SelfAttention2D(keras.layers.Layer):
         shape = x.get_shape().as_list()
         dim = np.prod(shape[1:-1])
         return tf.reshape(x, [-1, dim, shape[-1]])
-        
+
     def call(self, inputs):
         f = self.conv_f(inputs) # key
         g = self.conv_g(inputs) # query
@@ -139,7 +145,7 @@ class SAGAN():
         x = LeakyReLU(alpha=0.2)(x)
         x = BatchNormalization(momentum=0.8)(x)
 
-        self.generator_attn = SelfAttention2D(32)
+        self.generator_attn = SelfAttention(32)
         x, beta = self.generator_attn(x)
         x = Conv2DTranspose(16,3,strides=(2,2),padding="same")(x)
         x = LeakyReLU(alpha=0.2)(x)
@@ -159,7 +165,7 @@ class SAGAN():
         x = LeakyReLU(alpha=0.2)(x)
         x = MaxPooling2D(pool_size=(2, 2))(x)
 
-        self.discriminator_attn = SelfAttention2D(16)
+        self.discriminator_attn = SelfAttention(16)
         x, beta = self.discriminator_attn(x)
 
         x = Conv2D(32,(3,3),padding="same")(x)
